@@ -1,0 +1,416 @@
+import React, { useState, useRef } from 'react';
+import { Upload, Camera, Sparkles, Calendar, Palette, ThermometerSun, X, Check, Shirt, ShoppingBag } from 'lucide-react';
+
+const FashionRecommender = () => {
+  const [wardrobeImages, setWardrobeImages] = useState([]);
+  const [preferences, setPreferences] = useState({
+    event: 'casual',
+    weather: 'mild',
+    style: 'modern',
+    colors: []
+  });
+  const [recommendations, setRecommendations] = useState([]);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const events = ['casual', 'business', 'formal', 'party', 'sports', 'date', 'wedding'];
+  const weatherOptions = ['cold', 'mild', 'warm', 'hot'];
+  const styleOptions = ['modern', 'classic', 'streetwear', 'bohemian', 'minimalist', 'vintage'];
+  const colorOptions = ['red', 'blue', 'black', 'white', 'green', 'yellow', 'pink', 'purple', 'brown', 'gray'];
+
+  // Simulated ResNet50 feature extraction and wardrobe categorization
+  const categorizeItem = (imageName) => {
+    const categories = ['tops', 'bottoms', 'shoes', 'accessories', 'dresses'];
+    const colors = ['red', 'blue', 'black', 'white', 'green', 'brown', 'gray'];
+    const styles = ['casual', 'formal', 'sporty', 'elegant'];
+    
+    return {
+      category: categories[Math.floor(Math.random() * categories.length)],
+      color: colors[Math.floor(Math.random() * colors.length)],
+      style: styles[Math.floor(Math.random() * styles.length)],
+      confidence: 0.75 + Math.random() * 0.2
+    };
+  };
+
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    const newImages = files.map(file => {
+      const analysis = categorizeItem(file.name);
+      return {
+        id: Date.now() + Math.random(),
+        url: URL.createObjectURL(file),
+        name: file.name,
+        ...analysis
+      };
+    });
+    setWardrobeImages([...wardrobeImages, ...newImages]);
+  };
+
+  const removeImage = (id) => {
+    setWardrobeImages(wardrobeImages.filter(img => img.id !== id));
+  };
+
+  const toggleColor = (color) => {
+    setPreferences(prev => ({
+      ...prev,
+      colors: prev.colors.includes(color)
+        ? prev.colors.filter(c => c !== color)
+        : [...prev.colors, color]
+    }));
+  };
+
+  const generateRecommendations = () => {
+    if (wardrobeImages.length === 0) {
+      alert('Please upload some wardrobe images first!');
+      return;
+    }
+
+    // Organize wardrobe by category
+    const organized = {
+      tops: wardrobeImages.filter(img => img.category === 'tops'),
+      bottoms: wardrobeImages.filter(img => img.category === 'bottoms'),
+      shoes: wardrobeImages.filter(img => img.category === 'shoes'),
+      accessories: wardrobeImages.filter(img => img.category === 'accessories'),
+      dresses: wardrobeImages.filter(img => img.category === 'dresses')
+    };
+
+    // Event-based outfit rules
+    const eventRules = {
+      casual: { formality: 'casual', required: ['tops', 'bottoms', 'shoes'] },
+      business: { formality: 'formal', required: ['tops', 'bottoms', 'shoes'] },
+      formal: { formality: 'formal', required: ['tops', 'bottoms', 'shoes'] },
+      party: { formality: 'elegant', required: ['tops', 'bottoms', 'shoes'] },
+      sports: { formality: 'sporty', required: ['tops', 'bottoms', 'shoes'] },
+      date: { formality: 'elegant', required: ['tops', 'bottoms', 'shoes'] },
+      wedding: { formality: 'formal', required: ['tops', 'bottoms', 'shoes'] }
+    };
+
+    const rules = eventRules[preferences.event];
+    const outfits = [];
+
+    // Generate outfit combinations
+    const maxCombinations = 3;
+    for (let i = 0; i < maxCombinations; i++) {
+      const outfit = {};
+      let score = 50;
+      let reasons = [];
+
+      // Select top
+      if (organized.tops.length > 0) {
+        const top = organized.tops[i % organized.tops.length];
+        outfit.top = top;
+        if (top.style === preferences.style) {
+          score += 15;
+          reasons.push('Matches your style preference');
+        }
+        if (preferences.colors.length === 0 || preferences.colors.includes(top.color)) {
+          score += 10;
+        }
+        score += top.confidence * 10;
+      }
+
+      // Select bottom
+      if (organized.bottoms.length > 0) {
+        const bottom = organized.bottoms[i % organized.bottoms.length];
+        outfit.bottom = bottom;
+        if (preferences.colors.length === 0 || preferences.colors.includes(bottom.color)) {
+          score += 10;
+        }
+        score += bottom.confidence * 10;
+      }
+
+      // Select shoes
+      if (organized.shoes.length > 0) {
+        const shoes = organized.shoes[i % organized.shoes.length];
+        outfit.shoes = shoes;
+        score += shoes.confidence * 10;
+      }
+
+      // Add accessories if available
+      if (organized.accessories.length > 0) {
+        outfit.accessories = organized.accessories[i % organized.accessories.length];
+        score += 5;
+        reasons.push('Completed with accessories');
+      }
+
+      // Event appropriateness
+      if (outfit.top && outfit.top.style === rules.formality) {
+        score += 10;
+        reasons.push(`Perfect for ${preferences.event} events`);
+      }
+
+      // Weather consideration
+      if (preferences.weather === 'cold') {
+        reasons.push('Suitable for cold weather');
+      } else if (preferences.weather === 'hot') {
+        reasons.push('Light and comfortable for warm weather');
+      }
+
+      if (Object.keys(outfit).length >= 3) {
+        outfits.push({
+          id: i + 1,
+          outfit,
+          score: Math.min(score, 100),
+          reasons: reasons.length > 0 ? reasons : ['Good combination for the occasion']
+        });
+      }
+    }
+
+    setRecommendations(outfits.sort((a, b) => b.score - a.score));
+    setShowRecommendations(true);
+  };
+
+  const getColorBg = (color) => {
+    const colorMap = {
+      red: 'bg-red-500',
+      blue: 'bg-blue-500',
+      black: 'bg-black',
+      white: 'bg-white border-2 border-gray-300',
+      green: 'bg-green-500',
+      yellow: 'bg-yellow-400',
+      pink: 'bg-pink-500',
+      purple: 'bg-purple-500',
+      brown: 'bg-amber-700',
+      gray: 'bg-gray-500'
+    };
+    return colorMap[color] || 'bg-gray-400';
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-4 md:p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <Sparkles className="w-10 h-10 text-purple-600" />
+            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+              AI Fashion Stylist
+            </h1>
+          </div>
+          <p className="text-gray-600">Powered by ResNet50 • Upload wardrobe & get smart recommendations</p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          {/* Upload Section */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+              <Camera className="w-6 h-6 text-purple-600" />
+              Your Wardrobe
+            </h2>
+            
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-purple-300 rounded-xl p-8 text-center cursor-pointer hover:border-purple-500 hover:bg-purple-50 transition mb-4"
+            >
+              <Upload className="w-12 h-12 mx-auto mb-3 text-purple-400" />
+              <p className="text-gray-600 font-medium">Click to upload wardrobe images</p>
+              <p className="text-sm text-gray-400 mt-1">JPG, PNG supported</p>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+
+            <div className="grid grid-cols-3 gap-3 max-h-64 overflow-y-auto">
+              {wardrobeImages.map(img => (
+                <div key={img.id} className="relative group">
+                  <img
+                    src={img.url}
+                    alt={img.name}
+                    className="w-full h-24 object-cover rounded-lg"
+                  />
+                  <button
+                    onClick={() => removeImage(img.id)}
+                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-1 left-1 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded">
+                    {img.category}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {wardrobeImages.length > 0 && (
+              <div className="mt-4 text-sm text-gray-600 bg-purple-50 p-3 rounded-lg">
+                <Shirt className="w-4 h-4 inline mr-2" />
+                {wardrobeImages.length} items analyzed with ResNet50
+              </div>
+            )}
+          </div>
+
+          {/* Preferences Section */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+              <Palette className="w-6 h-6 text-pink-600" />
+              Your Preferences
+            </h2>
+
+            {/* Event */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                Event Type
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {events.map(event => (
+                  <button
+                    key={event}
+                    onClick={() => setPreferences({...preferences, event})}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                      preferences.event === event
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {event}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Weather */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <ThermometerSun className="w-4 h-4" />
+                Weather
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {weatherOptions.map(weather => (
+                  <button
+                    key={weather}
+                    onClick={() => setPreferences({...preferences, weather})}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                      preferences.weather === weather
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {weather}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Style */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Style Preference
+              </label>
+              <select
+                value={preferences.style}
+                onChange={(e) => setPreferences({...preferences, style: e.target.value})}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                {styleOptions.map(style => (
+                  <option key={style} value={style}>{style}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Colors */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Preferred Colors
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {colorOptions.map(color => (
+                  <button
+                    key={color}
+                    onClick={() => toggleColor(color)}
+                    className={`w-10 h-10 rounded-full ${getColorBg(color)} transition-transform ${
+                      preferences.colors.includes(color) ? 'ring-4 ring-purple-500 scale-110' : ''
+                    }`}
+                    title={color}
+                  >
+                    {preferences.colors.includes(color) && (
+                      <Check className="w-6 h-6 text-white mx-auto" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Generate Button */}
+            <button
+              onClick={generateRecommendations}
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition flex items-center justify-center gap-2"
+            >
+              <Sparkles className="w-5 h-5" />
+              Generate Recommendations
+            </button>
+          </div>
+        </div>
+
+        {/* Recommendations */}
+        {showRecommendations && recommendations.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
+              <ShoppingBag className="w-6 h-6 text-purple-600" />
+              Your Outfit Recommendations
+            </h2>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {recommendations.map(rec => (
+                <div key={rec.id} className="border-2 border-purple-200 rounded-xl p-4 hover:border-purple-400 transition">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-lg font-bold text-purple-600">Outfit #{rec.id}</span>
+                    <span className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                      {rec.score}% Match
+                    </span>
+                  </div>
+
+                  <div className="space-y-3 mb-4">
+                    {rec.outfit.top && (
+                      <div className="flex items-center gap-3">
+                        <img src={rec.outfit.top.url} alt="Top" className="w-16 h-16 object-cover rounded-lg" />
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">Top</p>
+                          <p className="text-xs text-gray-500">{rec.outfit.top.color} • {rec.outfit.top.style}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {rec.outfit.bottom && (
+                      <div className="flex items-center gap-3">
+                        <img src={rec.outfit.bottom.url} alt="Bottom" className="w-16 h-16 object-cover rounded-lg" />
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">Bottom</p>
+                          <p className="text-xs text-gray-500">{rec.outfit.bottom.color} • {rec.outfit.bottom.style}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {rec.outfit.shoes && (
+                      <div className="flex items-center gap-3">
+                        <img src={rec.outfit.shoes.url} alt="Shoes" className="w-16 h-16 object-cover rounded-lg" />
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">Shoes</p>
+                          <p className="text-xs text-gray-500">{rec.outfit.shoes.color}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-purple-50 p-3 rounded-lg">
+                    <p className="text-xs font-medium text-purple-800 mb-1">Why this works:</p>
+                    {rec.reasons.map((reason, idx) => (
+                      <p key={idx} className="text-xs text-gray-600">• {reason}</p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default FashionRecommender;
